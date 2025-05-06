@@ -1,5 +1,6 @@
 'use client';
 
+import React from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import Image from 'next/image';
@@ -16,9 +17,10 @@ interface TierListItemProps {
   };
   onEdit?: () => void;
   onDelete?: () => void;
+  isCompleted?: boolean; // Ajout de la propriété isCompleted
 }
 
-export default function TierListItem({ item, onEdit, onDelete }: TierListItemProps) {
+export default function TierListItem({ item, onEdit, onDelete, isCompleted = false }: TierListItemProps) {
   const [imageError, setImageError] = useState(false);
   const [showActions, setShowActions] = useState(false);
   
@@ -70,8 +72,8 @@ export default function TierListItem({ item, onEdit, onDelete }: TierListItemPro
       onMouseEnter={() => setShowActions(true)}
       onMouseLeave={() => setShowActions(false)}
     >
-      {/* Menu d'actions - Complètement séparé des attributs de drag and drop */}
-      {showActions && (onEdit || onDelete) && (
+      {/* Menu d'actions - Masqué si la tier list est terminée */}
+      {showActions && !isCompleted && (onEdit || onDelete) && (
         <div className="absolute top-2 right-2 z-30 bg-gray-800/90 backdrop-blur-sm rounded-lg p-1 shadow-lg opacity-0 group-hover:opacity-100 transition-opacity flex space-x-1">
           {onEdit && (
             <button 
@@ -105,16 +107,18 @@ export default function TierListItem({ item, onEdit, onDelete }: TierListItemPro
         </div>
       )}
       
-      {/* Zone de drag handle - spécifique pour le glisser-déposer */}
-      <div 
-        className="absolute top-2 left-2 z-10 bg-gray-800/80 backdrop-blur-sm rounded-full p-1.5 opacity-0 group-hover:opacity-100 transition-opacity cursor-grab active:cursor-grabbing"
-        {...attributes}
-        {...listeners}
-      >
-        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-        </svg>
-      </div>
+      {/* Zone de drag handle - désactivée si la tier list est terminée */}
+      {!isCompleted && (
+        <div 
+          className="absolute top-2 left-2 z-10 bg-gray-800/80 backdrop-blur-sm rounded-full p-1.5 opacity-0 group-hover:opacity-100 transition-opacity cursor-grab active:cursor-grabbing"
+          {...attributes}
+          {...listeners}
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
+        </div>
+      )}
       
       {renderImage()}
       
@@ -131,4 +135,4 @@ export default function TierListItem({ item, onEdit, onDelete }: TierListItemPro
       </div>
     </div>
   );
-} 
+}

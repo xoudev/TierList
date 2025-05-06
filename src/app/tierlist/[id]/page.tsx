@@ -226,6 +226,9 @@ export default function TierListPage({ params }: { params: { id: string } }) {
   // Modifions le système de sortable context pour une approche plus fiable
   // Au lieu d'une seule zone pour tous les items, nous allons créer une zone par tier
   const handleDragStart = useCallback((event: any) => {
+    // Empêcher le drag & drop si la tier list est terminée
+    if (isCompleted) return;
+    
     isDraggingRef.current = true;
     setActiveId(event.active.id);
     const item = items.find(item => item.id === event.active.id);
@@ -238,7 +241,7 @@ export default function TierListPage({ params }: { params: { id: string } }) {
         timestamp: Date.now()
       };
     }
-  }, [items]);
+  }, [items, isCompleted]);
 
   const handleDragOver = useCallback((event: DragOverEvent) => {
     // Récupérer l'ID de l'élément actuellement survolé
@@ -469,6 +472,12 @@ export default function TierListPage({ params }: { params: { id: string } }) {
   const handleAddItem = async (e: React.FormEvent) => {
     e.preventDefault();
     
+    // Empêcher l'ajout d'éléments si la tier list est terminée
+    if (isCompleted) {
+      setError("Impossible de modifier une tier list terminée");
+      return;
+    }
+    
     if (!validateForm()) return;
     
     setIsAddingItem(true);
@@ -668,6 +677,13 @@ export default function TierListPage({ params }: { params: { id: string } }) {
 
   // Fonction pour supprimer un élément
   const deleteItem = async (itemId: string) => {
+    // Empêcher la suppression d'éléments si la tier list est terminée
+    if (isCompleted) {
+      setError("Impossible de modifier une tier list terminée");
+      setShowDeleteConfirm(false);
+      return;
+    }
+    
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Vous devez être connecté pour supprimer un élément');
@@ -701,6 +717,13 @@ export default function TierListPage({ params }: { params: { id: string } }) {
   // Fonction pour sauvegarder les modifications d'un élément
   const saveItemEdits = async () => {
     if (!editingItem) return;
+    
+    // Empêcher la modification d'éléments si la tier list est terminée
+    if (isCompleted) {
+      setError("Impossible de modifier une tier list terminée");
+      setShowEditModal(false);
+      return;
+    }
     
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -783,9 +806,53 @@ export default function TierListPage({ params }: { params: { id: string } }) {
       setIsCompleting(false);
     }
   };
+  
+  const handleCompleteTierList = async () => {
+    setIsCompleting(true);
+    try {
+      const { error } = await supabase
+        .from('tier_lists')
+        .update({ is_completed: true })
+        .eq('id', id);
+      
+      if (error) throw error;
+      
+      setIsCompleted(true);
+      setError(null);
+    } catch (error: any) {
+      setError(error.message);
+    } finally {
+      setIsCompleting(false);
+    }
+  };
+  
+  const handleReopenTierList = async () => {
+    setIsCompleting(true);
+    try {
+      const { error } = await supabase
+        .from('tier_lists')
+        .update({ is_completed: false })
+        .eq('id', id);
+      
+      if (error) throw error;
+      
+      setIsCompleted(false);
+      setError(null);
+    } catch (error: any) {
+      setError(error.message);
+    } finally {
+      setIsCompleting(false);
+    }
+  };
 
   // Fonction pour ajouter un nouveau tier
   const addNewTier = async () => {
+    // Empêcher l'ajout de tiers si la tier list est terminée
+    if (isCompleted) {
+      setError("Impossible de modifier une tier list terminée");
+      return;
+    }
+    
     if (newTierName && !tiers.some(t => t.name === newTierName)) {
       try {
         const { data: { user } } = await supabase.auth.getUser();
@@ -831,6 +898,12 @@ export default function TierListPage({ params }: { params: { id: string } }) {
 
   // Modifier la fonction deleteTier
   const deleteTier = async (tierToDelete: string) => {
+    // Empêcher la suppression de tiers si la tier list est terminée
+    if (isCompleted) {
+      setError("Impossible de modifier une tier list terminée");
+      return;
+    }
+    
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Vous devez être connecté pour supprimer un tier');
@@ -903,6 +976,12 @@ export default function TierListPage({ params }: { params: { id: string } }) {
 
   // Fonction pour réorganiser les tiers
   const moveTier = async (fromIndex: number, toIndex: number) => {
+    // Empêcher la réorganisation des tiers si la tier list est terminée
+    if (isCompleted) {
+      setError("Impossible de modifier une tier list terminée");
+      return;
+    }
+    
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Vous devez être connecté pour réorganiser les tiers');
@@ -1050,28 +1129,33 @@ export default function TierListPage({ params }: { params: { id: string } }) {
                         item={item} 
                         onEdit={() => handleEditItem(item)}
                         onDelete={() => handleDeleteItem(item.id)}
+                        isCompleted={isCompleted}
                       />
                     ))}
                 </div>
               </SortableContext>
             ) : (
-              <div className={`h-full w-full flex items-center justify-center text-gray-500 transition-all duration-300 ${
-                activeTier === tier.name ? 'text-indigo-300' : ''
-              }`}>
-                <p className="text-center text-sm">
-                  {activeTier === tier.name ? (
-                    <>
-                      Déposer ici pour ajouter au Tier {tier.name}<br />
-                      <span className="text-xs opacity-75">L'élément sera ajouté à ce tier</span>
-                    </>
-                  ) : (
-                    <>
-                      Aucun élément dans ce tier.<br />
-                      Glissez-déposez des éléments ici.
-                    </>
-                  )}
-                </p>
-              </div>
+              !isCompleted ? (
+                <div className={`h-full w-full flex items-center justify-center text-gray-500 transition-all duration-300 ${
+                  activeTier === tier.name ? 'text-indigo-300' : ''
+                }`}>
+                  <p className="text-center text-sm">
+                    {activeTier === tier.name ? (
+                      <>
+                        Déposer ici pour ajouter au Tier {tier.name}<br />
+                        <span className="text-xs opacity-75">L'élément sera ajouté à ce tier</span>
+                      </>
+                    ) : (
+                      <>
+                        Aucun élément dans ce tier.<br />
+                        Glissez-déposez des éléments ici.
+                      </>
+                    )}
+                  </p>
+                </div>
+              ) : (
+                <div className="h-full w-full"></div>
+              )
             )}
           </div>
         </TierDroppable>
@@ -1080,38 +1164,27 @@ export default function TierListPage({ params }: { params: { id: string } }) {
   };
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white py-12 px-4 sm:px-6">
+    <div className="min-h-screen bg-gradient-to-b from-gray-900 to-gray-800 text-white pb-20 py-12 px-4 sm:px-6">
       <div className="max-w-7xl mx-auto">
         {/* Header avec titre et boutons d'action */}
-        <div className="flex justify-between items-center mb-12">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-12 gap-4">
           <div className="flex items-center gap-4">
-            <h1 className="text-4xl font-extrabold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-pink-500 to-violet-500">
+            <h1 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-purple-500">
               {title}
-            </h1>
-            {isCompleted && (
-              <div className="flex items-center gap-2">
-                <span className="text-sm bg-green-900/30 text-green-400 font-medium px-2.5 py-1 rounded-full border border-green-800">
+              {isCompleted && (
+                <span className="ml-3 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
                   Terminée
                 </span>
-                <button
-                  onClick={unlockTierList}
-                  className="text-yellow-500 hover:text-yellow-400 transition-colors flex items-center gap-1 text-sm font-medium"
-                  title="Déverrouiller la tier list"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                  </svg>
-                  <span>Déverrouiller</span>
-                </button>
-              </div>
-            )}
+              )}
+            </h1>
           </div>
-          <div className="flex space-x-4">
+          <div className="flex flex-wrap gap-2">
             {!isCompleted && (
               <>
                 <FormButton
                   onClick={() => setIsFormOpen(!isFormOpen)}
-                  variant="primary"
+                  variant="secondary"
+                  disabled={isCompleted}
                   icon={
                     isFormOpen ? (
                       <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1130,6 +1203,7 @@ export default function TierListPage({ params }: { params: { id: string } }) {
                 <FormButton
                   onClick={() => setShowTierForm(!showTierForm)}
                   variant="secondary"
+                  disabled={isCompleted}
                   icon={
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -1144,7 +1218,7 @@ export default function TierListPage({ params }: { params: { id: string } }) {
             {!isCompleted ? (
               <FormButton
                 onClick={completeTierList}
-                variant="secondary"
+                variant="primary"
                 isLoading={isCompleting}
                 icon={
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1156,15 +1230,15 @@ export default function TierListPage({ params }: { params: { id: string } }) {
               </FormButton>
             ) : (
               <FormButton
-                onClick={() => router.push('/dashboard')}
-                variant="secondary"
+                onClick={unlockTierList}
+                variant="danger"
                 icon={
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                   </svg>
                 }
               >
-                Retour au tableau de bord
+                Rouvrir la tier list
               </FormButton>
             )}
           </div>
@@ -1312,22 +1386,43 @@ export default function TierListPage({ params }: { params: { id: string } }) {
                 onDragOver={handleDragOver}
                 onDragEnd={handleDragEnd}
               >
-                <div className="space-y-8">
-                  {tiers.map(renderTierContent)}
-                </div>
+                <SortableContext items={itemIds} strategy={verticalListSortingStrategy}>
+                  <div className="space-y-8">
+                    {tiers.map(renderTierContent)}
+                  </div>
+                </SortableContext>
 
-                <DragOverlay>
-                  {activeId ? (
-                    <div className="opacity-80">
-                      {items.find(item => item.id === activeId) && (
-                        <TierListItem 
-                          item={items.find(item => item.id === activeId)!}
-                          onEdit={() => {}}
-                          onDelete={() => {}}
-                        />
+                <DragOverlay adjustScale={false} zIndex={1000}>
+                  {draggedItem && (
+                    <div className="w-48 bg-gray-700 rounded-lg shadow-xl border border-indigo-500 overflow-hidden transition-all duration-300">
+                      {draggedItem.image_url ? (
+                        <div className="w-full aspect-video relative overflow-hidden">
+                          <img
+                            src={draggedItem.image_url}
+                            alt={draggedItem.title}
+                            className="absolute inset-0 w-full h-full object-cover"
+                          />
+                        </div>
+                      ) : (
+                        <div className="w-full aspect-video bg-gradient-to-br from-gray-600 to-gray-800 flex items-center justify-center">
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                          </svg>
+                        </div>
                       )}
+                      <div className="p-3">
+                        <h3 className="text-sm font-semibold text-white truncate">{draggedItem.title}</h3>
+                        <div className="flex items-center text-xs text-gray-400 mt-1">
+                          <span className="inline-flex items-center">
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
+                            </svg>
+                            Tier {draggedItem.tier}
+                          </span>
+                        </div>
+                      </div>
                     </div>
-                  ) : null}
+                  )}
                 </DragOverlay>
               </DndContext>
             )}
@@ -1664,4 +1759,4 @@ export default function TierListPage({ params }: { params: { id: string } }) {
       </div>
     </div>
   );
-} 
+}
